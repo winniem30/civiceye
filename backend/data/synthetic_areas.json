@@ -1,0 +1,122 @@
+[
+  {
+    "id": 1,
+    "name": "Test Area 1",
+    "description": "Synthetic test area for deforestation",
+    "bounds": {
+      "min_x": 37.26203572067129,
+      "max_x": 137.6604370457285,
+      "min_y": 70.47035873190666,
+      "max_y": 87.81527126366475
+    },
+    "created_at": "2026-04-14T17:20:08.499281"
+  },
+  {
+    "id": 2,
+    "name": "Test Area 2",
+    "description": "Synthetic test area for deforestation",
+    "bounds": {
+      "min_x": -100.26353575322523,
+      "max_x": -138.5408421318292,
+      "min_y": -51.84006375486261,
+      "max_y": -76.45120368181337
+    },
+    "created_at": "2026-06-24T17:20:08.518952"
+  },
+  {
+    "id": 3,
+    "name": "Test Area 3",
+    "description": "Synthetic test area for urban_expansion",
+    "bounds": {
+      "min_x": 169.66112749531777,
+      "max_x": -72.31286299850684,
+      "min_y": -4.493922901780493,
+      "max_y": -45.135750026452314
+    },
+    "created_at": "2026-01-29T17:20:08.533255"
+  },
+  {
+    "id": 4,
+    "name": "Test Area 4",
+    "description": "Synthetic test area for construction",
+    "bounds": {
+      "min_x": 34.18192422191467,
+      "max_x": -71.09092006433421,
+      "min_y": -69.65734421759613,
+      "max_y": 23.020124601063173
+    },
+    "created_at": "2025-11-16T17:20:08.544506"
+  },
+  {
+    "id": 5,
+    "name": "Test Area 5",
+    "description": "Synthetic test area for deforestation",
+    "bounds": {
+      "min_x": 170.55235222991843,
+      "max_x": -102.6935437304895,
+      "min_y": -15.962123689219837,
+      "max_y": -26.189273488038545
+    },
+    "created_at": "2025-09-25T17:20:08.557497"
+  },
+  {
+    "id": 6,
+    "name": "Test Area 6",
+    "description": "Synthetic test area for mining",
+    "bounds": {
+      "min_x": 119.44671597165683,
+      "max_x": 172.8239059603281,
+      "min_y": 61.21244465317838,
+      "max_y": -39.78233480970109
+    },
+    "created_at": "2026-04-15T17:20:08.569190"
+  },
+  {
+    "id": 7,
+    "name": "Test Area 7",
+    "description": "Synthetic test area for construction",
+    "bounds": {
+      "min_x": 38.27508737574496,
+      "max_x": 45.01859155247203,
+      "min_y": -50.16958088268387,
+      "max_y": 60.99050904615217
+    },
+    "created_at": "2026-02-05T17:20:08.577893"
+  },
+  {
+    "id": 8,
+    "name": "Test Area 8",
+    "description": "Synthetic test area for mining",
+    "bounds": {
+      "min_x": 14.422994344611766,
+      "max_x": 87.46637572715673,
+      "min_y": 46.13104117998776,
+      "max_y": -38.24219200093276
+    },
+    "created_at": "2026-01-11T17:20:08.590392"
+  },
+  {
+    "id": 9,
+    "name": "Test Area 9",
+    "description": "Synthetic test area for agriculture",
+    "bounds": {
+      "min_x": -49.930315481519386,
+      "max_x": -95.7953608580549,
+      "min_y": 84.50510834499534,
+      "max_y": 10.961873416827302
+    },
+    "created_at": "2026-05-01T17:20:08.604386"
+  },
+  {
+    "id": 10,
+    "name": "Test Area 10",
+    "description": "Synthetic test area for urban_expansion",
+    "bounds": {
+      "min_x": -179.4115187241896,
+      "max_x": -45.54654867163208,
+      "min_y": -16.68891593877092,
+      "max_y": 77.73475876427341
+    },
+    "created_at": "2025-11-17T17:20:08.615459"
+  }
+]
