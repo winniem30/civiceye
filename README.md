@@ -65,7 +65,20 @@ Interactive GIS Dashboard
 - GeoPandas
 - Shapely
 - NumPy
+## Key Features
 
+- **Area of Interest (AOI) Selection** – Select a specific geographic area for monitoring and analysis.
+- **Satellite Image Comparison** – Compare satellite imagery from different dates to identify changes over time.
+- **AI-Based Change Detection** – Detect significant changes in land, infrastructure and other geographic features.
+- **Human vs Natural Change Classification** – Identify whether detected changes are likely to be caused by human activity or natural processes.
+- **Human Activity Classification** – Classify detected human-induced changes into relevant activity categories.
+- **GIS Context Analysis** – Analyze nearby roads, buildings, water bodies and other geographic features to understand the surrounding impact.
+- **Risk Assessment** – Evaluate the potential environmental and infrastructure risks associated with detected changes.
+- **Explainable AI** – Provide supporting information to help users understand why an alert was generated.
+- **Temporal Change Tracking** – Track how detected changes develop over time.
+- **Interactive GIS Dashboard** – Present detected changes, risk information and investigation results through an interactive map-based interface.
+- **Alerts and Investigations** – Help users identify important changes and investigate them using available evidence.
+- **Future Change Prediction** – Use historical change patterns to estimate possible future developments.
 ## Project Structure
 
 ```
