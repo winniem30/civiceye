@@ -294,25 +294,83 @@ const StepIndicator = ({ step, currentStep, label }: { step: number; currentStep
   );
 };
 
-const ImageSelector = ({ images, selected, onSelect, label }: { images: SatelliteImage[]; selected: SatelliteImage | null; onSelect: (img: SatelliteImage) => void; label: string }) => {
+const ImageSelector = ({
+  label,
+  images,
+  selected,
+  onSelect,
+}: {
+  label: string;
+  images: SatelliteImage[];
+  selected: SatelliteImage | null;
+  onSelect: (image: SatelliteImage | null) => void;
+}) => {
   return (
-    <div>
-      <label className="block text-sm font-medium mb-2">{label}</label>
+    <div className="border rounded-xl p-4 bg-white shadow-sm">
+      <h3 className="font-semibold text-lg mb-3">{label}</h3>
+
       <select
-        className="input-field"
-        value={selected?.id || ''}
+        value={selected?.id ?? ''}
         onChange={(e) => {
-          const img = images.find(i => i.id === parseInt(e.target.value));
-          if (img) onSelect(img);
+          const image = images.find(
+            (img) => img.id === Number(e.target.value)
+          );
+          onSelect(image ?? null);
         }}
+        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
       >
-        <option value="">Select an image...</option>
-        {images.map((img) => (
-          <option key={img.id} value={img.id}>
-            {new Date(img.acquisition_date).toLocaleDateString()} - Cloud: {img.cloud_cover}%
+        <option value="">Select satellite image</option>
+
+        {images.map((image) => (
+          <option key={image.id} value={image.id}>
+            {image.satellite_name} — {image.acquisition_date}
           </option>
         ))}
       </select>
+
+      {selected && (
+        <div className="mt-4 space-y-2 text-sm">
+          {selected.preview_path && (
+            <img
+              src={selected.preview_path}
+              alt={`Satellite image from ${selected.acquisition_date}`}
+              className="w-full h-40 object-cover rounded-lg border"
+            />
+          )}
+
+          <div className="grid grid-cols-2 gap-2">
+            <div className="bg-gray-50 rounded-lg p-2">
+              <p className="text-gray-500">Satellite</p>
+              <p className="font-medium">
+                {selected.satellite_name}
+              </p>
+            </div>
+
+            <div className="bg-gray-50 rounded-lg p-2">
+              <p className="text-gray-500">Date</p>
+              <p className="font-medium">
+                {selected.acquisition_date}
+              </p>
+            </div>
+
+            <div className="bg-gray-50 rounded-lg p-2">
+              <p className="text-gray-500">Cloud Cover</p>
+              <p className="font-medium">
+                {selected.cloud_cover !== undefined
+                  ? `${selected.cloud_cover}%`
+                  : 'Not available'}
+              </p>
+            </div>
+
+            <div className="bg-gray-50 rounded-lg p-2">
+              <p className="text-gray-500">Image ID</p>
+              <p className="font-medium">
+                #{selected.id}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
