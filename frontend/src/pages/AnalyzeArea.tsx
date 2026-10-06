@@ -191,18 +191,23 @@ const AnalyzeArea = () => {
             <p className="text-gray-500">No images found for the selected criteria.</p>
           ) : (
             <div className="grid grid-cols-2 gap-4 mb-4">
-              <ImageSelector
-                images={images}
-                selected={selectedImage1}
-                onSelect={setSelectedImage1}
-                label="Image 1 (Before)"
-              />
-              <ImageSelector
-                images={images}
-                selected={selectedImage2}
-                onSelect={setSelectedImage2}
-                label="Image 2 (After)"
-              />
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+  <ImageSelector
+    label="T1 — Baseline Image"
+    images={images}
+    selected={selectedImage1}
+    onSelect={setSelectedImage1}
+    excludeImageId={selectedImage2?.id}
+  />
+
+  <ImageSelector
+    label="T2 — Comparison Image"
+    images={images}
+    selected={selectedImage2}
+    onSelect={setSelectedImage2}
+    excludeImageId={selectedImage1?.id}
+  />
+</div>
             </div>
           )}
           <div className="flex space-x-4">
@@ -299,11 +304,13 @@ const ImageSelector = ({
   images,
   selected,
   onSelect,
+  excludeImageId,
 }: {
   label: string;
   images: SatelliteImage[];
   selected: SatelliteImage | null;
   onSelect: (image: SatelliteImage | null) => void;
+  excludeImageId?: number;
 }) => {
   return (
     <div className="border rounded-xl p-4 bg-white shadow-sm">
@@ -321,11 +328,13 @@ const ImageSelector = ({
       >
         <option value="">Select satellite image</option>
 
-        {images.map((image) => (
-          <option key={image.id} value={image.id}>
-            {image.satellite_name} — {image.acquisition_date}
-          </option>
-        ))}
+       {images
+  .filter((image) => image.id !== excludeImageId)
+  .map((image) => (
+    <option key={image.id} value={image.id}>
+      {image.satellite_name} — {image.acquisition_date}
+    </option>
+  ))}
       </select>
 
       {selected && (
