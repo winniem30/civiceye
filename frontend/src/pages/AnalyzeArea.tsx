@@ -217,6 +217,12 @@ const AnalyzeArea = () => {
   />
 </div>
             </div>
+          {selectedImage1 &&
+  selectedImage2 &&
+  new Date(selectedImage1.acquisition_date) >= new Date(selectedImage2.acquisition_date) && (
+    <p className="text-red-600 text-sm font-medium mt-3">
+      ⚠️ T1 must be earlier than T2. Please select the images in chronological order.
+    </p>
           )}
           <div className="flex space-x-4">
             <button onClick={() => setStep(2)} className="btn-secondary">
