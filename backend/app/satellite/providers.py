@@ -142,4 +142,6 @@ class Sentinel2Provider(SatelliteProvider):
         """Download Sentinel-2 image"""
         return output_path
 
-    async def get_preview(self,
+        async def get_preview(self, image_id: str) -> str:
+        """Get preview image"""
+        return None
