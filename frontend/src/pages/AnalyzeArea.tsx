@@ -45,9 +45,17 @@ const AnalyzeArea = () => {
   };
 
   const handleRunAnalysis = async () => {
-    if (!selectedImage1 || !selectedImage2) return;
-    
-    setAnalyzing(true);
+  if (!selectedImage1 || !selectedImage2) return;
+
+  const t1Date = new Date(selectedImage1.acquisition_date);
+  const t2Date = new Date(selectedImage2.acquisition_date);
+
+  if (t1Date >= t2Date) {
+    alert('T1 must be an earlier image than T2. Please select the images in chronological order.');
+    return;
+  }
+  
+  setAnalyzing(true);
     try {
       const result = await changeDetectionService.detectChange({
         image_t1_id: selectedImage1.id,
