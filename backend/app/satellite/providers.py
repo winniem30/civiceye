@@ -2,12 +2,14 @@ from abc import ABC, abstractmethod
 from typing import List, Dict, Optional
 from datetime import datetime
 import os
+
 from app.core.config import settings
+from sentinelhub import SHConfig, SentinelHubCatalog, DataCollection
 
 
 class SatelliteProvider(ABC):
     """Abstract base class for satellite data providers"""
-    
+
     @abstractmethod
     async def search_images(
         self,
@@ -18,12 +20,12 @@ class SatelliteProvider(ABC):
     ) -> List[Dict]:
         """Search for satellite images matching criteria"""
         pass
-    
+
     @abstractmethod
     async def download_image(self, image_id: str, output_path: str) -> str:
         """Download satellite image"""
         pass
-    
+
     @abstractmethod
     async def get_preview(self, image_id: str) -> str:
         """Get preview image path"""
@@ -32,24 +34,37 @@ class SatelliteProvider(ABC):
 
 class Sentinel2Provider(SatelliteProvider):
     """Sentinel-2 satellite data provider"""
-    
+
     def __init__(self):
         self.name = "sentinel-2"
-        self.base_dir = os.path.join(settings.SATELLITE_DIR, "sentinel-2")
+        self.base_dir = os.path.join(
+            settings.SATELLITE_DIR,
+            "sentinel-2"
+        )
         os.makedirs(self.base_dir, exist_ok=True)
-    
-        async def search_images(
-        self,
-        bounds,
-        start_date=None,
-        end_date=None,
-        max_cloud_cover=None
-    ):
-        """
-        Search for real Sentinel-2 images from Copernicus Data Space.
-        """
 
-        # Convert bounds to Sentinel Hub format
+        # Copernicus Data Space configuration
+        config = SHConfig()
+        config.sh_client_id = settings.SENTINEL_CLIENT_ID
+        config.sh_client_secret = settings.SENTINEL_CLIENT_SECRET
+        config.sh_token_url = (
+            "https://identity.dataspace.copernicus.eu/"
+            "auth/realms/CDSE/protocol/openid-connect/token"
+        )
+        config.sh_base_url = "https://sh.dataspace.copernicus.eu"
+
+        self.config = config
+        self.catalog = SentinelHubCatalog(config=self.config)
+
+    async def search_images(
+        self,
+        bounds: Dict,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        max_cloud_cover: Optional[float] = None
+    ) -> List[Dict]:
+        """Search for Sentinel-2 images from Copernicus Data Space."""
+
         bbox = [
             bounds["min_lon"],
             bounds["min_lat"],
@@ -57,14 +72,12 @@ class Sentinel2Provider(SatelliteProvider):
             bounds["max_lat"]
         ]
 
-        # Default dates if not provided
         if start_date is None:
             start_date = datetime.utcnow()
 
         if end_date is None:
             end_date = datetime.utcnow()
 
-        # Search Copernicus catalog
         search = self.catalog.search(
             collection=DataCollection.SENTINEL2_L2A,
             bbox=bbox,
@@ -110,7 +123,7 @@ class Sentinel2Provider(SatelliteProvider):
             })
 
         return images
-    
+
     def _get_local_images(
         self,
         bounds: Dict,
@@ -119,84 +132,14 @@ class Sentinel2Provider(SatelliteProvider):
         max_cloud_cover: Optional[float]
     ) -> List[Dict]:
         """Check for local satellite images"""
-        # TODO: Implement local image catalog
         return []
-    
-    async def download_image(self, image_id: str, output_path: str) -> str:
+
+    async def download_image(
+        self,
+        image_id: str,
+        output_path: str
+    ) -> str:
         """Download Sentinel-2 image"""
-        # TODO: Implement actual download from API
-        # For development, copy from local dataset
         return output_path
-    
-    async def get_preview(self, image_id: str) -> str:
-        """Get preview image"""
-        # TODO: Generate or retrieve preview
-        return None
 
-
-class Landsat8Provider(SatelliteProvider):
-    """Landsat-8 satellite data provider"""
-    
-    def __init__(self):
-        self.name = "landsat-8"
-        self.base_dir = os.path.join(settings.SATELLITE_DIR, "landsat-8")
-        os.makedirs(self.base_dir, exist_ok=True)
-    
-    async def search_images(
-        self,
-        bounds: Dict,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None,
-        max_cloud_cover: Optional[float] = None
-    ) -> List[Dict]:
-        """Search for Landsat-8 images"""
-        # TODO: Integrate with USGS EarthExplorer API
-        return []
-    
-    async def download_image(self, image_id: str, output_path: str) -> str:
-        """Download Landsat-8 image"""
-        return output_path
-    
-    async def get_preview(self, image_id: str) -> str:
-        """Get preview image"""
-        return None
-
-
-class LocalDatasetProvider(SatelliteProvider):
-    """Provider for local development datasets"""
-    
-    def __init__(self):
-        self.name = "local-dataset"
-        self.base_dir = os.path.join(settings.SATELLITE_DIR, "local")
-        os.makedirs(self.base_dir, exist_ok=True)
-    
-    async def search_images(
-        self,
-        bounds: Dict,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None,
-        max_cloud_cover: Optional[float] = None
-    ) -> List[Dict]:
-        """Search for local dataset images"""
-        # TODO: Scan local directory for available images
-        return []
-    
-    async def download_image(self, image_id: str, output_path: str) -> str:
-        """Copy from local dataset"""
-        return output_path
-    
-    async def get_preview(self, image_id: str) -> str:
-        """Get preview from local dataset"""
-        return None
-
-
-def get_satellite_provider(provider_name: str) -> SatelliteProvider:
-    """Factory function to get satellite provider"""
-    providers = {
-        "sentinel-2": Sentinel2Provider,
-        "landsat-8": Landsat8Provider,
-        "local": LocalDatasetProvider
-    }
-    
-    provider_class = providers.get(provider_name, Sentinel2Provider)
-    return provider_class()
+    async def get_preview(self,
