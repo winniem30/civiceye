@@ -231,7 +231,11 @@ const AnalyzeArea = () => {
             <button
               onClick={() => setStep(4)}
               className="btn-primary"
-              disabled={!selectedImage1 || !selectedImage2}
+              disabled={
+  !selectedImage1 ||
+  !selectedImage2 ||
+  new Date(selectedImage1.acquisition_date) >= new Date(selectedImage2.acquisition_date)
+}
             >
               Continue
             </button>
