@@ -38,44 +38,77 @@ class Sentinel2Provider(SatelliteProvider):
         self.base_dir = os.path.join(settings.SATELLITE_DIR, "sentinel-2")
         os.makedirs(self.base_dir, exist_ok=True)
     
-    async def search_images(
+        async def search_images(
         self,
-        bounds: Dict,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None,
-        max_cloud_cover: Optional[float] = None
-    ) -> List[Dict]:
+        bounds,
+        start_date=None,
+        end_date=None,
+        max_cloud_cover=None
+    ):
         """
-        Search for Sentinel-2 images.
-        
-        For development, this uses a local dataset or simulated data.
-        In production, this would connect to Sentinel Hub or ESA API.
+        Search for real Sentinel-2 images from Copernicus Data Space.
         """
-        # TODO: Integrate with Sentinel Hub or ESA API
-        # For now, return simulated data structure
-        
+
+        # Convert bounds to Sentinel Hub format
+        bbox = [
+            bounds["min_lon"],
+            bounds["min_lat"],
+            bounds["max_lon"],
+            bounds["max_lat"]
+        ]
+
+        # Default dates if not provided
+        if start_date is None:
+            start_date = datetime.utcnow()
+
+        if end_date is None:
+            end_date = datetime.utcnow()
+
+        # Search Copernicus catalog
+        search = self.catalog.search(
+            collection=DataCollection.SENTINEL2_L2A,
+            bbox=bbox,
+            datetime=(start_date, end_date),
+            limit=20
+        )
+
         images = []
-        
-        # Check if we have local data
-        local_images = self._get_local_images(bounds, start_date, end_date, max_cloud_cover)
-        if local_images:
-            return local_images
-        
-        # Return placeholder for development
-        images.append({
-            "id": "placeholder_sentinel_001",
-            "acquisition_date": datetime.utcnow(),
-            "cloud_cover": 5.0,
-            "bounds": bounds,
-            "metadata": {
-                "satellite": "Sentinel-2",
-                "resolution": 10,
-                "bands": ["B02", "B03", "B04", "B08", "B11", "B12"]
-            },
-            "file_path": None,  # Will be set when image is downloaded
-            "preview_path": None
-        })
-        
+
+        for item in search.items():
+            properties = item.properties
+
+            cloud_cover = properties.get("eo:cloud_cover", 0)
+
+            if (
+                max_cloud_cover is not None
+                and cloud_cover > max_cloud_cover
+            ):
+                continue
+
+            images.append({
+                "id": item.id,
+                "acquisition_date": properties.get(
+                    "datetime",
+                    item.datetime
+                ),
+                "cloud_cover": cloud_cover,
+                "bounds": bounds,
+                "metadata": {
+                    "satellite": "Sentinel-2",
+                    "resolution": 10,
+                    "bands": [
+                        "B02",
+                        "B03",
+                        "B04",
+                        "B08",
+                        "B11",
+                        "B12"
+                    ]
+                },
+                "file_path": None,
+                "preview_path": None
+            })
+
         return images
     
     def _get_local_images(
