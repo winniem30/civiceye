@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { AlertTriangle, Activity, Map, TrendingUp } from 'lucide-react';
 import { changeDetectionService } from '../services/changeDetectionService';
+import { alertService } from '../services/alertService';
 import type { ChangeEvent, Alert } from '../types';
 
 const Dashboard = () => {
   const [changeEvents, setChangeEvents] = useState<ChangeEvent[]>([]);
+  const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -13,8 +15,12 @@ const Dashboard = () => {
 
   const loadDashboardData = async () => {
     try {
-      const events = await changeDetectionService.listChangeEvents(0, 10);
+      const [events, alertsData] = await Promise.all([
+        changeDetectionService.listChangeEvents(0, 10),
+        alertService.listAlerts({ limit: 10 })
+      ]);
       setChangeEvents(events);
+      setAlerts(alertsData);
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
     } finally {
@@ -30,6 +36,9 @@ const Dashboard = () => {
     );
   }
 
+  const activeAlerts = alerts.filter(a => a.status === 'open' || a.status === 'investigating').length;
+  const highRiskEvents = changeEvents.filter(e => e.confidence > 0.7).length;
+
   return (
     <div className="container mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold mb-8">Dashboard</h1>
@@ -38,7 +47,7 @@ const Dashboard = () => {
       <div className="grid md:grid-cols-4 gap-6 mb-8">
         <StatCard
           title="Active Alerts"
-          value="3"
+          value={activeAlerts.toString()}
           icon={<AlertTriangle className="w-6 h-6 text-red-500" />}
           color="red"
         />
@@ -56,7 +65,7 @@ const Dashboard = () => {
         />
         <StatCard
           title="High Risk Regions"
-          value="2"
+          value={highRiskEvents.toString()}
           icon={<TrendingUp className="w-6 h-6 text-orange-500" />}
           color="orange"
         />

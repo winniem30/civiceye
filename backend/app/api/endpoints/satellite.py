@@ -1,13 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
-import json
 import os
 from app.db.session import get_db
-from app.db.models import SatelliteImage
+from app.db.models import SatelliteImage, Observation
 from app.satellite.providers import get_satellite_provider
-from pydantic import BaseModel
+from app.preprocessing.pipeline import PreprocessingPipeline
+from pydantic import BaseModel, validator
 
 router = APIRouter()
 
@@ -15,64 +15,81 @@ router = APIRouter()
 class SatelliteImageResponse(BaseModel):
     id: int
     satellite_name: str
+    stac_id: str
     acquisition_date: datetime
     cloud_cover: Optional[float]
     bounds: dict
     metadata: Optional[dict]
-    file_path: Optional[str]
-    preview_path: Optional[str]
 
     class Config:
         from_attributes = True
 
 
-class ImageSearchRequest(BaseModel):
+class ObservationSearchRequest(BaseModel):
     bounds: dict  # {min_x, min_y, max_x, max_y}
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
     max_cloud_cover: Optional[float] = 20.0
     satellite: Optional[str] = "sentinel-2"
+    
+    @validator('bounds')
+    def validate_bounds(cls, v):
+        required_keys = ['min_x', 'min_y', 'max_x', 'max_y']
+        if not all(k in v for k in required_keys):
+            raise ValueError(f"Bounds must contain {required_keys}")
+        if v['min_x'] >= v['max_x'] or v['min_y'] >= v['max_y']:
+            raise ValueError("Invalid bounds: min must be less than max")
+        return v
 
 
-def load_synthetic_data():
-    """Load synthetic data for testing"""
-    try:
-        data_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "synthetic_change_events.json")
-        if os.path.exists(data_path):
-            with open(data_path, "r") as f:
-                return json.load(f)
-    except:
-        pass
-    return None
+class ProcessObservationRequest(BaseModel):
+    stac_id: str
+    aoi_bounds: Optional[dict] = None  # Optional AOI for clipping
+    clip_to_aoi: bool = True
+
+
+class ObservationResponse(BaseModel):
+    id: int
+    stac_id: str
+    processing_status: str
+    aoi_bounds: Optional[dict]
+    band_files: Optional[dict]
+    index_files: Optional[dict]
+    metadata: Optional[dict]
+    error_message: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
 
 
 @router.post("/search", response_model=List[SatelliteImageResponse])
-async def search_satellite_images(
-    request: ImageSearchRequest,
+async def search_observations(
+    request: ObservationSearchRequest,
     db: Session = Depends(get_db)
 ):
-    # Try to use synthetic data for testing
-    synthetic_data = load_synthetic_data()
-    if synthetic_data:
-        # Return synthetic satellite images
-        images = []
-        for i, event in enumerate(synthetic_data[:5]):  # Return first 5
-            images.append(SatelliteImageResponse(
-                id=i + 1,
-                satellite_name="synthetic-sentinel-2",
-                acquisition_date=datetime.fromisoformat(event["timestamp"]),
-                cloud_cover=5.0,
-                bounds=event["bounds"],
-                metadata={"change_type": event["change_type"]},
-                file_path=None,
-                preview_path=None
-            ))
-        return images
+    """
+    Search for satellite observations using STAC API.
     
-    # Fall back to actual satellite provider
+    Returns real Sentinel-2 observations matching the criteria.
+    """
+    # Validate bounds
+    try:
+        required_keys = ['min_x', 'min_y', 'max_x', 'max_y']
+        if not all(k in request.bounds for k in required_keys):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Bounds must contain {required_keys}"
+            )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+    # Get satellite provider
     provider = get_satellite_provider(request.satellite)
     
     try:
+        # Search for observations
         images = await provider.search_images(
             bounds=request.bounds,
             start_date=request.start_date,
@@ -80,75 +97,205 @@ async def search_satellite_images(
             max_cloud_cover=request.max_cloud_cover
         )
         
-        # Store in database
+        if not images:
+            raise HTTPException(
+                status_code=404,
+                detail="No observations found matching the criteria"
+            )
+        
+        # Store or update in database
         db_images = []
         for img in images:
-            db_img = SatelliteImage(
-                satellite_name=request.satellite,
-                acquisition_date=img["acquisition_date"],
-                cloud_cover=img.get("cloud_cover"),
-                bounds=request.bounds,
-                metadata=img.get("metadata"),
-                file_path=img.get("file_path"),
-                preview_path=img.get("preview_path")
-            )
-            db.add(db_img)
-            db.commit()
-            db.refresh(db_img)
-            db_images.append(db_img)
+            # Check if already exists
+            existing = db.query(SatelliteImage).filter(
+                SatelliteImage.stac_id == img["stac_id"]
+            ).first()
+            
+            if existing:
+                db_images.append(existing)
+            else:
+                db_img = SatelliteImage(
+                    satellite_name=request.satellite,
+                    stac_id=img["stac_id"],
+                    acquisition_date=img["acquisition_date"],
+                    cloud_cover=img.get("cloud_cover"),
+                    bounds=img["bounds"],
+                    image_metadata=img.get("metadata"),
+                    bands=img.get("metadata", {}).get("bands", [])
+                )
+                db.add(db_img)
+                db.commit()
+                db.refresh(db_img)
+                db_images.append(db_img)
         
         return db_images
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to search images: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to search observations: {str(e)}")
 
 
-@router.get("/images", response_model=List[SatelliteImageResponse])
-async def list_images(
-    skip: int = 0,
-    limit: int = 100,
+@router.post("/process", response_model=ObservationResponse)
+async def process_observation(
+    request: ProcessObservationRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
-    # Try synthetic data first
-    synthetic_data = load_synthetic_data()
-    if synthetic_data:
-        images = []
-        for i, event in enumerate(synthetic_data[skip:skip+limit]):
-            images.append(SatelliteImageResponse(
-                id=i + 1,
-                satellite_name="synthetic-sentinel-2",
-                acquisition_date=datetime.fromisoformat(event["timestamp"]),
-                cloud_cover=5.0,
-                bounds=event["bounds"],
-                metadata={"change_type": event["change_type"]},
-                file_path=None,
-                preview_path=None
-            ))
-        return images
+    """
+    Process a satellite observation: download bands, clip to AOI, calculate indices.
     
-    # Fall back to database
-    images = db.query(SatelliteImage).offset(skip).limit(limit).all()
-    return images
+    Processing happens asynchronously in the background.
+    """
+    # Find the satellite image
+    sat_image = db.query(SatelliteImage).filter(
+        SatelliteImage.stac_id == request.stac_id
+    ).first()
+    
+    if not sat_image:
+        raise HTTPException(status_code=404, detail="Satellite image not found")
+    
+    # Check if already processed with same AOI
+    existing_obs = db.query(Observation).filter(
+        Observation.stac_id == request.stac_id,
+        Observation.aoi_bounds == request.aoi_bounds
+    ).first()
+    
+    if existing_obs and existing_obs.processing_status == "completed":
+        return existing_obs
+    
+    # Create new observation record
+    observation = Observation(
+        satellite_image_id=sat_image.id,
+        stac_id=request.stac_id,
+        aoi_bounds=request.aoi_bounds,
+        processing_status="processing",
+        processing_timestamp=datetime.utcnow()
+    )
+    db.add(observation)
+    db.commit()
+    db.refresh(observation)
+    
+    # Process in background
+    background_tasks.add_task(
+        _process_observation_task,
+        observation.id,
+        sat_image.image_metadata.get("assets", {}),
+        request.aoi_bounds,
+        request.clip_to_aoi,
+        db
+    )
+    
+    return observation
 
 
-@router.get("/images/{image_id}", response_model=SatelliteImageResponse)
-async def get_image(image_id: int, db: Session = Depends(get_db)):
-    # Try synthetic data first
-    synthetic_data = load_synthetic_data()
-    if synthetic_data and image_id <= len(synthetic_data):
-        event = synthetic_data[image_id - 1]
-        return SatelliteImageResponse(
-            id=image_id,
-            satellite_name="synthetic-sentinel-2",
-            acquisition_date=datetime.fromisoformat(event["timestamp"]),
-            cloud_cover=5.0,
-            bounds=event["bounds"],
-            metadata={"change_type": event["change_type"]},
-            file_path=None,
-            preview_path=None
+async def _process_observation_task(
+    observation_id: int,
+    assets: dict,
+    aoi_bounds: Optional[dict],
+    clip_to_aoi: bool,
+    db: Session
+):
+    """Background task to process observation"""
+    pipeline = PreprocessingPipeline()
+    
+    try:
+        # Process the observation
+        result = await pipeline.process_sentinel2_observation(
+            stac_id=str(observation_id),
+            assets=assets,
+            bounds=aoi_bounds,
+            clip_to_aoi=clip_to_aoi
+        )
+        
+        # Update database
+        observation = db.query(Observation).filter(
+            Observation.id == observation_id
+        ).first()
+        
+        if observation:
+            observation.processing_status = result.get("processing_status", "failed")
+            observation.processing_timestamp = datetime.utcnow()
+
+            if result.get("processing_status") == "completed":
+                observation.band_files = result.get("band_files")
+                observation.index_files = result.get("index_files")
+                observation.image_metadata = result.get("metadata")
+            else:
+                observation.error_message = result.get("error")
+
+            db.commit()
+            
+    except Exception as e:
+        # Update with error
+        observation = db.query(Observation).filter(
+            Observation.id == observation_id
+        ).first()
+        if observation:
+            observation.processing_status = "failed"
+            observation.error_message = str(e)
+            observation.processing_timestamp = datetime.utcnow()
+            db.commit()
+    finally:
+        await pipeline.close()
+
+
+@router.get("/observations", response_model=List[ObservationResponse])
+async def list_observations(
+    skip: int = 0,
+    limit: int = 100,
+    processing_status: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """List processed observations"""
+    query = db.query(Observation)
+    
+    if processing_status:
+        query = query.filter(Observation.processing_status == processing_status)
+    
+    observations = query.order_by(Observation.created_at.desc()).offset(skip).limit(limit).all()
+    return observations
+
+
+@router.get("/observations/{observation_id}", response_model=ObservationResponse)
+async def get_observation(
+    observation_id: int,
+    db: Session = Depends(get_db)
+):
+    """Get a specific observation"""
+    observation = db.query(Observation).filter(
+        Observation.id == observation_id
+    ).first()
+    
+    if not observation:
+        raise HTTPException(status_code=404, detail="Observation not found")
+    
+    return observation
+
+
+@router.get("/observations/{observation_id}/layers")
+async def get_observation_layers(
+    observation_id: int,
+    db: Session = Depends(get_db)
+):
+    """Get available layers for an observation"""
+    observation = db.query(Observation).filter(
+        Observation.id == observation_id
+    ).first()
+    
+    if not observation:
+        raise HTTPException(status_code=404, detail="Observation not found")
+    
+    if observation.processing_status != "completed":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Observation not processed yet. Status: {observation.processing_status}"
         )
     
-    # Fall back to database
-    image = db.query(SatelliteImage).filter(SatelliteImage.id == image_id).first()
-    if not image:
-        raise HTTPException(status_code=404, detail="Image not found")
-    return image
+    return {
+        "observation_id": observation_id,
+        "stac_id": observation.stac_id,
+        "bands": observation.band_files or {},
+        "indices": observation.index_files or {},
+        "metadata": observation.image_metadata
+    }

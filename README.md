@@ -14,9 +14,11 @@ CIVIC-EYE answers:
 ## Architecture
 
 ```
-Satellite / Remote Sensing Data
+Sentinel-2 STAC API (Real Satellite Data)
 ↓
-Image Preprocessing
+Image Preprocessing (Band Download, AOI Clipping)
+↓
+Spectral Indices (NDVI, NDWI, NDBI)
 ↓
 Multi-temporal Change Detection
 ↓
@@ -44,13 +46,18 @@ Interactive GIS Dashboard
 ### Frontend
 - React + TypeScript
 - Tailwind CSS
-- Mapbox GL JS
+- Leaflet + OpenStreetMap (No Mapbox token required)
 - Recharts
 
 ### Backend
 - Python + FastAPI
 - PostgreSQL + PostGIS
 - Redis + Celery
+
+### Satellite Data
+- Sentinel-2 Level-2A via STAC API (AWS Earth Search)
+- Real-time band download and processing
+- Georeferenced raster storage
 
 ### AI/ML
 - PyTorch
@@ -73,77 +80,57 @@ civiceye/
 ├── backend/                 # FastAPI backend
 │   ├── app/
 │   │   ├── api/            # API endpoints
+│   │   │   ├── satellite.py    # Sentinel-2 search & processing
+│   │   │   ├── raster.py        # Raster visualization
+│   │   │   └── ...
 │   │   ├── core/           # Configuration, security
-│   │   ├── db/             # Database models
+│   │   ├── db/             # Database models (Observation, SatelliteImage)
 │   │   ├── ml/             # ML models and pipelines
-│   │   ├── satellite/      # Satellite data providers
-│   │   ├── preprocessing/  # Image preprocessing
+│   │   ├── satellite/      # STAC provider implementation
+│   │   ├── preprocessing/  # Band download, clipping, indices
 │   │   ├── gis/            # GIS context analysis
 │   │   └── services/       # Business logic
+│   ├── data/
+│   │   ├── rasters/        # Processed GeoTIFF storage
+│   │   ├── satellite/      # Downloaded bands
+│   │   └── cache/
 │   ├── tests/
 │   └── requirements.txt
 ├── frontend/               # React frontend
 │   ├── src/
 │   │   ├── components/
 │   │   ├── pages/
+│   │   │   ├── ExploreMap.tsx    # Leaflet map with AOI selection
+│   │   │   └── AnalyzeArea.tsx   # Satellite search & processing UI
 │   │   ├── services/
+│   │   │   └── satelliteService.ts  # API integration
 │   │   └── types/
 │   └── package.json
 ├── ml/                     # ML training scripts
-├── data/                   # Data storage
-│   ├── satellite/
-│   ├── models/
-│   └── cache/
 ├── docker/
 ├── docs/
 └── docker-compose.yml
 ```
 
-## Development Phases
+## Real Sentinel-2 Pipeline
 
-### Phase 1 — Working Foundation
-- Repository structure
-- Database setup
-- Backend API foundation
-- Frontend foundation
-- Map integration
-- AOI selection
+### Data Source
+- **Provider**: AWS Earth Search STAC API (public, no authentication required)
+- **Collection**: sentinel-2-l2a (Level-2A, atmospherically corrected)
+- **Bands**: B02 (Blue), B03 (Green), B04 (Red), B08 (NIR), B11 (SWIR1), B12 (SWIR2)
 
-### Phase 2 — Satellite Pipeline
-- Satellite data provider
-- Preprocessing pipeline
-- Imagery storage
-- Before/after comparison
+### Processing Workflow
+1. **Search**: Query STAC API for observations matching AOI, date range, cloud cover
+2. **Download**: Download required bands from public URLs
+3. **Clip**: Clip bands to AOI bounds (preserves CRS and georeferencing)
+4. **Calculate**: Compute NDVI, NDWI, NDBI indices with proper divide-by-zero handling
+5. **Store**: Save georeferenced GeoTIFFs to filesystem (not database)
+6. **Serve**: Provide raster tiles via API for visualization
 
-### Phase 3 — Core AI
-- Baseline change detection
-- Deep learning change detection
-- Human/natural classification
-- Activity classification
-
-### Phase 4 — Intelligence
-- Temporal tracking
-- Change DNA
-- GIS context
-- Risk engine
-- Explainability
-
-### Phase 5 — Advanced Features
-- Future prediction
-- What-if simulation
-- Unreported change detection
-- Human verification
-- Evidence chain
-- AI investigation assistant
-
-### Phase 6 — Productization
-- Authentication
-- Role-based access
-- Alerts
-- Reports
-- Testing
-- Docker
-- Deployment
+### Spectral Indices
+- **NDVI** (Normalized Difference Vegetation Index): (B08 - B04) / (B08 + B04)
+- **NDWI** (Normalized Difference Water Index): (B03 - B08) / (B03 + B08)
+- **NDBI** (Normalized Difference Built-up Index): (B11 - B08) / (B11 + B08)
 
 ## Setup
 
@@ -180,8 +167,11 @@ Create `.env` file in backend directory:
 DATABASE_URL=postgresql://user:password@localhost/civiceye
 REDIS_URL=redis://localhost:6379/0
 SECRET_KEY=your-secret-key
-MAPBOX_TOKEN=your-mapbox-token
+STAC_ENDPOINT=https://earth-search.aws.element84.com/v1
+SENTINEL_COLLECTION=sentinel-2-l2a
 ```
+
+**Note**: No Mapbox token required. OpenStreetMap is used for the basemap.
 
 ## Running the Application
 
@@ -201,6 +191,60 @@ npm run dev
 ```bash
 docker-compose up
 ```
+
+## Using the Real Sentinel-2 Pipeline
+
+### Example AOI for Testing
+Use these bounds for San Francisco Bay Area:
+```json
+{
+  "min_x": -122.5,
+  "min_y": 37.7,
+  "max_x": -122.3,
+  "max_y": 37.8
+}
+```
+
+### Step-by-Step Workflow
+
+1. **Select Area**
+   - Navigate to Explore Map
+   - Draw polygon or enter bounds manually
+   - Click "Analyze This Area"
+
+2. **Choose Date Range**
+   - Select start and end dates
+   - Recommended: 1-3 month range for best results
+   - Click "Search Observations"
+
+3. **Select Observation**
+   - Review available Sentinel-2 observations
+   - Check cloud cover percentage
+   - Select observation with lowest cloud cover
+   - Click "Process Observation"
+
+4. **View Processed Layers**
+   - Wait for processing to complete (downloads bands, clips to AOI, calculates indices)
+   - Select layer to visualize: NDVI, NDWI, or NDBI
+   - View georeferenced raster tiles
+
+### API Endpoints
+
+- `POST /satellite/search` - Search Sentinel-2 observations
+- `POST /satellite/process` - Process observation (download, clip, calculate indices)
+- `GET /satellite/observations` - List processed observations
+- `GET /satellite/observations/{id}` - Get observation details
+- `GET /satellite/observations/{id}/layers` - Get available layers
+- `GET /raster/raster/{observation_id}/{layer_name}` - Get raster tile as PNG
+
+## Important Notes
+
+- **No Mapbox Account Required**: Uses OpenStreetMap basemap via Leaflet
+- **Real Satellite Data**: Downloads actual Sentinel-2 bands from AWS
+- **Processing Time**: First observation may take 2-5 minutes (band downloads)
+- **Resumable**: Already-processed observations are not re-downloaded
+- **Storage**: Rasters stored in `backend/data/rasters/` by observation ID
+- **Error Handling**: Failed processing records error message for debugging
 
 ## License
 

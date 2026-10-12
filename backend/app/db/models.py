@@ -1,6 +1,5 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, ForeignKey, JSON
 from sqlalchemy.orm import relationship
-from geoalchemy2 import Geometry
 from app.db.database import Base
 from datetime import datetime
 
@@ -23,37 +22,70 @@ class User(Base):
 
 class Area(Base):
     __tablename__ = "areas"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)
     description = Column(Text)
-    geometry = Column(Geometry('POLYGON'))
+    geometry = Column(JSON)  # Changed from Geometry to JSON for MVP
     bounds = Column(JSON)  # {min_x, min_y, max_x, max_y}
     created_by = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime, default=datetime.utcnow)
-    
+
     # Relationships
     change_events = relationship("ChangeEvent", back_populates="area")
 
 
 class SatelliteImage(Base):
     __tablename__ = "satellite_images"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     satellite_name = Column(String, index=True)  # sentinel-2, landsat-8, etc.
+    stac_id = Column(String, unique=True, index=True)  # STAC item ID
     acquisition_date = Column(DateTime, index=True)
     cloud_cover = Column(Float)
-    geometry = Column(Geometry('POLYGON'))
+    geometry = Column(JSON)  # Changed from Geometry to JSON for MVP
     bounds = Column(JSON)
-    file_path = Column(String)
+    file_path = Column(String)  # Deprecated - use Observation model instead
     preview_path = Column(String)
-    metadata = Column(JSON)
+    image_metadata = Column(JSON)  # Renamed from 'metadata' to avoid SQLAlchemy reserved name
     bands = Column(JSON)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # Relationships
     change_events_t1 = relationship("ChangeEvent", foreign_keys="ChangeEvent.image_t1_id", back_populates="image_t1")
     change_events_t2 = relationship("ChangeEvent", foreign_keys="ChangeEvent.image_t2_id", back_populates="image_t2")
+    observations = relationship("Observation", back_populates="satellite_image")
+
+
+class Observation(Base):
+    """Processed satellite observation with bands and indices"""
+    __tablename__ = "observations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    satellite_image_id = Column(Integer, ForeignKey("satellite_images.id"), nullable=False)
+    stac_id = Column(String, index=True)  # STAC item ID
+
+    # AOI bounds for clipping
+    aoi_bounds = Column(JSON)  # {min_x, min_y, max_x, max_y}
+
+    # Processing status
+    processing_status = Column(String, default="pending")  # pending, processing, completed, failed
+    processing_timestamp = Column(DateTime)
+    error_message = Column(Text)
+
+    # Raster file paths (stored in filesystem, not database)
+    band_files = Column(JSON)  # {"B02": "path/to/B02.tif", ...}
+    index_files = Column(JSON)  # {"ndvi": "path/to/ndvi.tif", "ndwi": ..., "ndbi": ...}
+
+    # Metadata
+    image_metadata = Column(JSON)  # CRS, transform, bounds, width, height (renamed from metadata)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    satellite_image = relationship("SatelliteImage", back_populates="observations")
 
 
 class ChangeEvent(Base):
@@ -69,7 +101,7 @@ class ChangeEvent(Base):
     change_percentage = Column(Float)
     confidence = Column(Float)
     change_mask_path = Column(String)
-    bounding_geometry = Column(Geometry('POLYGON'))
+    bounding_geometry = Column(JSON)  # Changed from Geometry to JSON for MVP
     
     # Classification
     is_human_induced = Column(Boolean)
@@ -114,11 +146,11 @@ class ChangeDNA(Base):
 
 class GISFeature(Base):
     __tablename__ = "gis_features"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     feature_type = Column(String, index=True)  # water, road, residential, forest, etc.
     name = Column(String)
-    geometry = Column(Geometry('GEOMETRY'))
+    geometry = Column(JSON)  # Changed from Geometry to JSON for MVP
     properties = Column(JSON)
     created_at = Column(DateTime, default=datetime.utcnow)
 

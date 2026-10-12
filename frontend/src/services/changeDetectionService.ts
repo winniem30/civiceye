@@ -3,8 +3,8 @@ import type { ChangeEvent } from '../types';
 
 export const changeDetectionService = {
   async detectChange(data: {
-    image_t1_id: number;
-    image_t2_id: number;
+    observation_t1_id: number;
+    observation_t2_id: number;
     area_id?: number;
     method?: string;
   }): Promise<ChangeEvent> {

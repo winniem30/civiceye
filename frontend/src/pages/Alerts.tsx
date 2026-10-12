@@ -1,50 +1,35 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AlertTriangle, Filter, Search } from 'lucide-react';
+import { alertService } from '../services/alertService';
 import type { Alert } from '../types';
 
 const Alerts = () => {
   const [filter, setFilter] = useState<'all' | 'critical' | 'high' | 'medium' | 'low'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Mock data - replace with API call
-  const mockAlerts: Alert[] = [
-    {
-      id: 1,
-      alert_type: 'unreported_change',
-      severity: 'critical',
-      status: 'open',
-      title: 'Unreported Construction Near Water Body',
-      description: 'Potential unreported construction activity detected within 100m of water body.',
-      location: '12.9716° N, 77.5946° E',
-      created_at: new Date(Date.now() - 86400000).toISOString()
-    },
-    {
-      id: 2,
-      alert_type: 'standard',
-      severity: 'high',
-      status: 'investigating',
-      title: 'Rapid Vegetation Loss',
-      description: 'Significant vegetation loss detected in forest area.',
-      location: '13.0827° N, 80.2707° E',
-      created_at: new Date(Date.now() - 172800000).toISOString()
-    },
-    {
-      id: 3,
-      alert_type: 'standard',
-      severity: 'medium',
-      status: 'open',
-      title: 'Road Expansion Detected',
-      description: 'Road expansion activity detected in residential area.',
-      location: '28.6139° N, 77.2090° E',
-      created_at: new Date(Date.now() - 259200000).toISOString()
+  useEffect(() => {
+    loadAlerts();
+  }, [filter]);
+
+  const loadAlerts = async () => {
+    try {
+      setLoading(true);
+      const params = filter === 'all' ? {} : { severity: filter };
+      const data = await alertService.listAlerts(params);
+      setAlerts(data);
+    } catch (error) {
+      console.error('Failed to load alerts:', error);
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
 
-  const filteredAlerts = mockAlerts.filter(alert => {
-    const matchesFilter = filter === 'all' || alert.severity === filter;
+  const filteredAlerts = alerts.filter(alert => {
     const matchesSearch = alert.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         alert.location.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesFilter && matchesSearch;
+                         (alert.location && alert.location.toLowerCase().includes(searchQuery.toLowerCase()));
+    return matchesSearch;
   });
 
   const severityColors = {
@@ -60,6 +45,14 @@ const Alerts = () => {
     resolved: 'bg-green-100 text-green-800',
     dismissed: 'bg-gray-100 text-gray-800',
   };
+
+  if (loading) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="text-center">Loading alerts...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -100,10 +93,10 @@ const Alerts = () => {
 
       {/* Alert Stats */}
       <div className="grid grid-cols-4 gap-4 mb-6">
-        <AlertStatCard label="Critical" count={mockAlerts.filter(a => a.severity === 'critical').length} color="red" />
-        <AlertStatCard label="High" count={mockAlerts.filter(a => a.severity === 'high').length} color="orange" />
-        <AlertStatCard label="Medium" count={mockAlerts.filter(a => a.severity === 'medium').length} color="yellow" />
-        <AlertStatCard label="Low" count={mockAlerts.filter(a => a.severity === 'low').length} color="green" />
+        <AlertStatCard label="Critical" count={alerts.filter(a => a.severity === 'critical').length} color="red" />
+        <AlertStatCard label="High" count={alerts.filter(a => a.severity === 'high').length} color="orange" />
+        <AlertStatCard label="Medium" count={alerts.filter(a => a.severity === 'medium').length} color="yellow" />
+        <AlertStatCard label="Low" count={alerts.filter(a => a.severity === 'low').length} color="green" />
       </div>
 
       {/* Alerts List */}

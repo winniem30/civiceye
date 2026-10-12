@@ -59,13 +59,15 @@ export interface RiskAssessment {
 
 export interface Alert {
   id: number;
+  change_event_id?: number;
   alert_type: string;
   severity: 'critical' | 'high' | 'medium' | 'low';
   status: string;
   title: string;
   description: string;
-  location: string;
+  location?: string;
   created_at: string;
+  updated_at: string;
 }
 
 export interface User {
@@ -75,3 +77,16 @@ export interface User {
   role: 'admin' | 'analyst' | 'citizen';
   is_active: boolean;
 }
+
+export interface Investigation {
+  id: number;
+  change_event_id: number;
+  user_id: number;
+  report?: string;
+  ai_summary?: string;
+  findings?: any;
+  status: string;
+  created_at: string;
+  completed_at?: string;
+}
+

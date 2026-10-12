@@ -1,7 +1,5 @@
 import numpy as np
 from typing import Dict, Optional
-import torch
-import torch.nn as nn
 from abc import ABC, abstractmethod
 
 

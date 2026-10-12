@@ -1,34 +1,61 @@
 import { useState, useRef } from 'react';
-import MapGL, { MapRef, ViewState, Marker, Source, Layer } from 'react-map-gl';
+import { MapContainer, TileLayer, Polygon, Marker, useMapEvents } from 'react-leaflet';
+import { Icon, LatLng } from 'leaflet';
 import { Map as MapIcon, Layers, Calendar, Search } from 'lucide-react';
+import 'leaflet/dist/leaflet.css';
 
-const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || '';
+// Fix for default marker icon in Leaflet with React
+const customIcon = new Icon({
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
 
 interface PolygonPoint {
   lng: number;
   lat: number;
 }
 
-const ExploreMap = () => {
-  const mapRef = useRef<MapRef>(null);
-  const [viewState, setViewState] = useState<ViewState>({
-    longitude: 0,
-    latitude: 20,
-    zoom: 2,
+interface MapClickHandlerProps {
+  isDrawing: boolean;
+  onMapClick: (latlng: LatLng) => void;
+}
+
+const MapClickHandler = ({ isDrawing, onMapClick }: MapClickHandlerProps) => {
+  useMapEvents({
+    click(e) {
+      if (isDrawing) {
+        onMapClick(e.latlng);
+      }
+    },
+    contextmenu(e) {
+      if (isDrawing) {
+        e.originalEvent.preventDefault();
+      }
+    }
   });
+  return null;
+};
+
+const ExploreMap = () => {
   const [selectedBounds, setSelectedBounds] = useState<any>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [drawingPoints, setDrawingPoints] = useState<PolygonPoint[]>([]);
+  const [mapCenter, setMapCenter] = useState<[number, number]>([20, 0]);
+  const [mapZoom, setMapZoom] = useState(2);
 
-  const handleMapClick = (event: any) => {
+  const handleMapClick = (latlng: LatLng) => {
     if (!isDrawing) return;
     
-    const { lng, lat } = event.lngLat;
-    const newPoint = { lng, lat };
+    const newPoint = { lng: latlng.lng, lat: latlng.lat };
     setDrawingPoints([...drawingPoints, newPoint]);
   };
 
-  const handleRightClick = (event: any) => {
+  const handleRightClick = () => {
     if (!isDrawing || drawingPoints.length < 3) return;
     
     // Complete the polygon
@@ -56,7 +83,6 @@ const ExploreMap = () => {
 
   const handleAnalyzeArea = () => {
     if (selectedBounds) {
-      // Store bounds in sessionStorage for AnalyzeArea to use
       sessionStorage.setItem('selectedBounds', JSON.stringify(selectedBounds));
       window.location.href = '/analyze';
     }
@@ -64,7 +90,19 @@ const ExploreMap = () => {
 
   const handleDrawToggle = () => {
     setIsDrawing(!isDrawing);
+    if (!isDrawing) {
+      setDrawingPoints([]);
+    }
   };
+
+  const drawingPolygonPositions = drawingPoints.map(p => [p.lat, p.lng] as [number, number]);
+  const selectedPolygonPositions = selectedBounds ? [
+    [selectedBounds.min_y, selectedBounds.min_x],
+    [selectedBounds.min_y, selectedBounds.max_x],
+    [selectedBounds.max_y, selectedBounds.max_x],
+    [selectedBounds.max_y, selectedBounds.min_x],
+    [selectedBounds.min_y, selectedBounds.min_x]
+  ] as [number, number][] : [];
 
   return (
     <div className="h-screen flex flex-col">
@@ -88,117 +126,62 @@ const ExploreMap = () => {
 
       {/* Map Container */}
       <div className="flex-1 relative">
-        {MAPBOX_TOKEN ? (
-          <MapGL
-            ref={mapRef}
-            {...viewState}
-            onMove={evt => setViewState(evt.viewState)}
-            onClick={handleMapClick}
-            onContextMenu={handleRightClick}
-            style={{ width: '100%', height: '100%' }}
-            mapStyle="mapbox://styles/mapbox/satellite-v9"
-            mapboxAccessToken={MAPBOX_TOKEN}
-          >
-            {/* Drawing points markers */}
-            {drawingPoints.map((point, index) => (
-              <Marker key={index} longitude={point.lng} latitude={point.lat}>
-                <div className="w-4 h-4 bg-primary-600 rounded-full border-2 border-white shadow-lg" />
-              </Marker>
-            ))}
+        <MapContainer
+          center={mapCenter}
+          zoom={mapZoom}
+          style={{ width: '100%', height: '100%' }}
+          className="z-0"
+        >
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
+          
+          <MapClickHandler isDrawing={isDrawing} onMapClick={handleMapClick} />
 
-            {/* Drawing lines */}
-            {drawingPoints.length > 1 && (
-              <Source
-                id="drawing-line"
-                type="geojson"
-                data={{
-                  type: 'Feature',
-                  geometry: {
-                    type: 'LineString',
-                    coordinates: drawingPoints.map(p => [p.lng, p.lat]),
-                  },
-                }}
-              >
-                <Layer
-                  id="drawing-line-layer"
-                  type="line"
-                  paint={{
-                    'line-color': '#2563eb',
-                    'line-width': 3,
-                    'line-dasharray': [2, 2],
-                  }}
-                />
-              </Source>
-            )}
+          {/* Drawing points markers */}
+          {drawingPoints.map((point, index) => (
+            <Marker
+              key={index}
+              position={[point.lat, point.lng]}
+              icon={customIcon}
+            />
+          ))}
 
-            {/* Selected area polygon */}
-            {selectedBounds && (
-              <Source
-                id="selected-area"
-                type="geojson"
-                data={{
-                  type: 'Feature',
-                  geometry: {
-                    type: 'Polygon',
-                    coordinates: [[
-                      [selectedBounds.min_x, selectedBounds.min_y],
-                      [selectedBounds.max_x, selectedBounds.min_y],
-                      [selectedBounds.max_x, selectedBounds.max_y],
-                      [selectedBounds.min_x, selectedBounds.max_y],
-                      [selectedBounds.min_x, selectedBounds.min_y],
-                    ]],
-                  },
-                }}
-              >
-                <Layer
-                  id="selected-area-fill"
-                  type="fill"
-                  paint={{
-                    'fill-color': '#2563eb',
-                    'fill-opacity': 0.2,
-                  }}
-                />
-                <Layer
-                  id="selected-area-border"
-                  type="line"
-                  paint={{
-                    'line-color': '#2563eb',
-                    'line-width': 3,
-                  }}
-                />
-              </Source>
-            )}
-          </MapGL>
-        ) : (
-          <div className="w-full h-full flex items-center justify-center bg-gray-100">
-            <div className="text-center">
-              <MapIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600 mb-2">Mapbox token not configured</p>
-              <p className="text-sm text-gray-400">Add VITE_MAPBOX_TOKEN to your environment variables</p>
-            </div>
-          </div>
-        )}
+          {/* Drawing polygon */}
+          {drawingPoints.length > 2 && (
+            <Polygon
+              positions={drawingPolygonPositions}
+              pathOptions={{ color: '#2563eb', weight: 3, dashArray: '5, 5' }}
+            />
+          )}
+
+          {/* Selected area polygon */}
+          {selectedBounds && (
+            <Polygon
+              positions={selectedPolygonPositions}
+              pathOptions={{ color: '#2563eb', weight: 3, fillColor: '#2563eb', fillOpacity: 0.2 }}
+            />
+          )}
+        </MapContainer>
 
         {/* Layer Control Panel */}
-        <div className="absolute top-4 right-4 bg-white rounded-lg shadow-lg p-4 w-64">
+        <div className="absolute top-4 right-4 bg-white rounded-lg shadow-lg p-4 w-64 z-10">
           <h3 className="font-semibold mb-3 flex items-center">
             <Layers className="w-4 h-4 mr-2" />
             Layers
           </h3>
           <div className="space-y-2">
-            <LayerCheckbox label="Satellite Imagery" checked={true} />
-            <LayerCheckbox label="Change Detection" checked={true} />
+            <LayerCheckbox label="OpenStreetMap" checked={true} />
+            <LayerCheckbox label="Change Detection" checked={false} />
             <LayerCheckbox label="Human Activity" checked={false} />
-            <LayerCheckbox label="Buildings" checked={false} />
-            <LayerCheckbox label="Roads" checked={false} />
-            <LayerCheckbox label="Water Bodies" checked={true} />
+            <LayerCheckbox label="Water Bodies" checked={false} />
             <LayerCheckbox label="Vegetation" checked={false} />
-            <LayerCheckbox label="Risk Zones" checked={true} />
           </div>
         </div>
 
         {/* Search Panel */}
-        <div className="absolute top-4 left-4 bg-white rounded-lg shadow-lg p-4 w-80">
+        <div className="absolute top-4 left-4 bg-white rounded-lg shadow-lg p-4 w-80 z-10">
           <div className="flex items-center space-x-2 mb-3">
             <Search className="w-4 h-4 text-gray-400" />
             <input
@@ -215,7 +198,7 @@ const ExploreMap = () => {
 
         {/* Selected Area Info */}
         {selectedBounds && (
-          <div className="absolute bottom-4 left-4 bg-white rounded-lg shadow-lg p-4">
+          <div className="absolute bottom-4 left-4 bg-white rounded-lg shadow-lg p-4 z-10">
             <h3 className="font-semibold mb-2">Selected Area</h3>
             <div className="text-sm text-gray-600 mb-3">
               <p>Min: {selectedBounds.min_y.toFixed(4)}, {selectedBounds.min_x.toFixed(4)}</p>
@@ -234,14 +217,20 @@ const ExploreMap = () => {
 
         {/* Drawing Instructions */}
         {isDrawing && (
-          <div className="absolute top-20 left-4 bg-white rounded-lg shadow-lg p-4 w-64">
+          <div className="absolute top-20 left-4 bg-white rounded-lg shadow-lg p-4 w-64 z-10">
             <h3 className="font-semibold mb-2 text-primary-600">Drawing Mode</h3>
             <ul className="text-sm text-gray-600 space-y-1">
               <li>• Click to add points</li>
-              <li>• Right-click to complete polygon</li>
+              <li>• Click "Stop Drawing" to complete polygon</li>
               <li>• Minimum 3 points required</li>
             </ul>
             <p className="text-xs text-gray-400 mt-2">Points: {drawingPoints.length}</p>
+            <button
+              onClick={handleRightClick}
+              className="mt-3 w-full px-3 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700 transition-colors"
+            >
+              Complete Polygon
+            </button>
           </div>
         )}
       </div>
